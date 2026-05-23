@@ -1,0 +1,53 @@
+# Environment files
+.env
+*.env
+
+# Credentials
+credentials_*.json
+client_secret_*.json
+token_*.json
+.credentials/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+*.egg-info/
+
+# Node (if using JS integrations)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Database (if using local DB)
+*.db
+*.sqlite
+
+# User-owned files (never overwritten by git pull)
+CLAUDE.local.md
+state/current.md
+state/goals.md
+
+# Session data
+sessions/*.md
+!sessions/.gitkeep
+
+# Reports
+reports/*.md
+!reports/.gitkeep
+
+# Content logs
+content/log.md
+
+# Keep these tracked
+!.gitkeep
