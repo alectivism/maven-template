@@ -9,7 +9,7 @@ allowed-tools:
 # Reddit Scraping (Apify)
 
 ## Setup (skip if Apify is already connected)
-Requires the Apify connector (Claude Desktop) with your org's shared Apify token. If a scrape returns an auth or connection error, it isn't set up yet. Tell the user to open your org's Apify setup guide and follow it: {{APIFY_SETUP_DOC_URL}} ({{APIFY_SETUP_DOC_PATH}}).
+Requires the Apify connector (Claude Desktop) with your org's shared Apify token. If a scrape returns an auth or connection error, it isn't set up yet. Tell the user to open the setup guide and follow it: your org's Apify onboarding doc ({{APIFY_SETUP_DOC_URL}}) ({{APIFY_SETUP_DOC_PATH}}).
 
 Tool names: **Claude Desktop** → `Apify:call-actor`, `Apify:get-dataset-items`. **Claude Code** → deferred; load with `ToolSearch("apify call actor dataset")` first, then `mcp__claude_ai_Apify__*` (or `mcp__apify__*`).
 

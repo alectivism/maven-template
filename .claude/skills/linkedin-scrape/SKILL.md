@@ -1,109 +1,76 @@
 ---
 name: linkedin-scrape
-description: Scrape LinkedIn via the Apify connector — profile details, profile posts, people search, and company-employee lookup. No login cookies. Use for "look up LinkedIn profile", "scrape LinkedIn posts", "find the [title] at [company]", "search LinkedIn for [criteria]", "get someone's LinkedIn email".
+description: Scrape LinkedIn — a person's profile and posts, people and company search, company posts and employees. Free local MCP for most tasks; Apify connector for large bulk, verified emails, or shared/no-account-risk use. Use for "look up LinkedIn profile", "scrape [person]'s posts", "find people at [company]", "search LinkedIn for [criteria]".
 allowed-tools:
+  - mcp__linkedin__*
   - mcp__claude_ai_Apify__*
   - mcp__apify__*
 ---
 
-# LinkedIn Scraping (Apify)
+# LinkedIn
 
-Four use cases: **A** profile details, **B** profile posts, **C** people search, **D** company-employee lookup.
+Two backends. **Default to the free local MCP for most tasks.** Switch to **Apify** for large bulk, verified contact info, reliable company-anchored queries, or anything run across staff.
 
-## Setup (skip if Apify is already connected)
-Requires the Apify connector (Claude Desktop) with your org's shared Apify token. If a scrape returns an auth or connection error, it isn't set up yet. Tell the user to open your org's Apify setup guide and follow it: {{APIFY_SETUP_DOC_URL}} ({{APIFY_SETUP_DOC_PATH}}).
+| Need | Backend |
+|---|---|
+| A person's profile or posts; your feed; messaging | MCP |
+| People / company search | MCP |
+| Small batches (≈ up to a couple dozen), paced | MCP |
+| Large bulk (many dozens+) or recurring scraping | Apify |
+| Verified email + phone | Apify |
+| Company by exact URL, employee lists, department headcount | Apify |
+| Shared across staff with no personal-account risk | Apify |
 
-Tool names: **Claude Desktop** → `Apify:call-actor`, `Apify:get-dataset-items`. **Claude Code** → deferred; load with `ToolSearch("apify call actor dataset")` first.
-
-## Two-step pattern
-1. **`call-actor`** with actor + input, `waitSecs: 45` (the max; returns as soon as the run finishes). Gives a `datasetId`, not the rows.
-2. **`get-dataset-items`** with that id, **always** projecting `fields=` (actors return 80–230 columns).
-
----
-
-## A — Profile details
-| Need | Actor | Price | Returns |
-|---|---|---|---|
-| Profile, no contact info (default) | `harvestapi/linkedin-profile-scraper` (no-email) | $0.004/profile | full profile, no email/phone |
-| Email + phone | `dev_fusion/Linkedin-Profile-Scraper` | $0.01/profile | full profile + email + phone |
-| Verified email, bulk | `harvestapi/linkedin-profile-scraper` (email mode) | $0.01/profile | profile + email flags; empty when unverifiable; no phone |
-
-For "get this person's email/phone," use dev_fusion (returns both). harvestapi email mode is for bulk verified-deliverable lists and has lower hit rates (returns empty when it can't verify).
-
-### harvestapi/linkedin-profile-scraper
-- `profileScraperMode` (EXACT string incl. price suffix): `"Profile details no email ($4 per 1k)"` or `"Profile details + email search ($10 per 1k)"`.
-- Provide `publicIdentifiers` (slugs); **default to this**, since `urls` returned empty in testing. Slug = last segment of `linkedin.com/in/<slug>`.
-```json
-{ "profileScraperMode": "Profile details no email ($4 per 1k)", "publicIdentifiers": ["<slug>"] }
-```
-Email mode adds an `emails` array: `email, status, deliverable, qualityScore, free, catchAllDomain`.
-Projection: `fields: "firstName,lastName,headline,currentPosition.companyName,currentPosition.position,location.linkedinText,about,followerCount,connectionsCount,publicIdentifier,skills.name"`
-
-### dev_fusion/Linkedin-Profile-Scraper
-`profileUrls` (full URLs or slugs); returns email + phone by default.
-```json
-{ "profileUrls": ["https://www.linkedin.com/in/<slug>/"] }
-```
-Projection: `fields: "fullName,headline,jobTitle,companyName,addressWithCountry,about,email,mobileNumber,publicIdentifier,totalExperienceYears,experiencesCount"`
+**Account risk & pacing (MCP):** it drives *your own* logged-in LinkedIn account through an automation browser, against LinkedIn's User Agreement. It handles most tasks, including small batches — but **meter them**: keep counts modest (roughly a couple dozen at a time), space calls out instead of firing rapidly, and request only the sections you need. Rapid-fire scraping triggers per-tool timeouts and LinkedIn 403/challenge pages; sustained heavy use risks an account restriction. For large bulk (many dozens or hundreds) or recurring jobs, use Apify (shared paid account, no personal-account exposure).
 
 ---
 
-## B — Profile posts
+# Option A — `linkedin` MCP (default, free)
 
-### harvestapi/linkedin-profile-posts (default) — $0.002/post
-Returns text, media URLs, and reaction/comment/share **counts** free with each post.
-**Cost trap:** `scrapeReactions`/`scrapeComments` are billed **per record** ($0.002 each, one charge per individual reaction/comment). Counts come free, so default both **OFF**.
-```json
-{ "targetUrls": ["https://www.linkedin.com/in/<slug>/"], "maxPosts": 20, "scrapeReactions": false, "scrapeComments": false }
-```
-Output: `content`; `postImages.url`, `header.image.url` (media); `engagement.likes/comments/shares`, `engagement.reactions.type/.count`; `postedAt.date`; `author.name`; `linkedinUrl`; `repostedBy.*`. Rows have `type` `"post"`/`"reaction"`.
-Projection: `fields: "type,content,postImages,header,engagement,postedAt,author,linkedinUrl,repostedBy"`
-Comment text costs extra (`scrapeComments: true`, `maxComments: <n>`), or use `harvestapi/linkedin-post-comments`.
+[stickerdaniel/linkedin-mcp-server](https://github.com/stickerdaniel/linkedin-mcp-server) — free, local, uses your own LinkedIn session. No API key, no per-call cost.
 
-### apimaestro/linkedin-profile-posts (alt) — $0.005/post
-Flat price, no add-ons, faster (~5s). Comment count only, no comment text.
-```json
-{ "username": "<slug>", "total_posts": 20 }
-```
-Output: `media.url`, `media.images.url`; flat `stats.total_reactions/like/love/insight/support/celebrate/funny/comments/reposts`; `posted_at.date`.
+## Setup (skip if the `linkedin` MCP is connected)
+If LinkedIn tools aren't available, tell the user to install it:
+- **Claude Desktop (easiest):** download the latest `.mcpb` from <https://github.com/stickerdaniel/linkedin-mcp-server/releases> and click it to install.
+- **Any client (uvx):** add an MCP server `linkedin` → `command: uvx`, `args: ["mcp-server-linkedin@latest"]`, `env: {"UV_HTTP_TIMEOUT": "300"}`.
 
-**Avoid `supreme_coder/linkedin-post`:** failed 3/3 in testing (leaked session cookies; its "no cookies" claim is false).
+First tool call opens a browser to log in (2FA/captcha OK, ~5 min); session saves to `~/.linkedin-mcp/`. If an early call returns "setup in progress", wait and retry. Re-login when it expires: `uvx mcp-server-linkedin@latest --login`.
 
----
+## Tools & recipes
+- `get_person_profile(linkedin_username, sections, max_scrolls)` — `sections` = comma list of: experience, education, interests, honors, languages, certifications, skills, projects, contact_info, **posts**. Main page always included.
+  - **A person's posts:** `get_person_profile("<slug>", sections="posts")`; raise `max_scrolls` for more.
+- `get_my_profile(sections)` — your own profile (same sections).
+- `get_company_profile(company_name, sections)` — `sections`: posts, jobs. **Slug-sensitive (see gotcha).**
+- `get_company_posts`, `get_company_employees(company_name, keyword?)`.
+- `search_people(keywords, location?, network?, current_company?)`, `search_companies`, `search_jobs`, `get_job_details`, `get_feed`.
+- `get_inbox` / `get_conversation` / `search_conversations`; `connect_with_person` / `send_message` (**write actions — confirm first**); `close_session`.
 
-## C — People search
-### harvestapi/linkedin-profile-search
-**Needs a one-time permission approval.** The call returns an approval URL; surface it and stop, then retry after approval.
-Pricing: $0.10/search page (≤25 short profiles) + $0.004/full or $0.01/full+email.
-Input: `searchQuery`, `currentJobTitles[]`, `currentCompanies[]` (URLs), `locations[]`, `seniorityLevelIds[]`, `functionIds[]`, `industryIds[]`, `schools[]`, `recentlyChangedJobs`, `recentlyPostedOnLinkedIn`, `maxItems`, `profileScraperMode` (`"Short"`/`"Full"`/`"Full + email search"`).
-- Seniority: 110 Entry · 120 Senior · 130 Strategic · 200 Entry Mgr · 210 Exp Mgr · 220 Director · 300 VP · 310 CXO · 320 Owner/Partner
-- Function: 8 Eng · 10 Finance · 12 HR · 13 IT · 14 Legal · 15 Marketing · 18 Operations · 19 Product · 25 Sales
-```json
-{ "searchQuery": "Chief Marketing Officer", "locations": ["United States"], "seniorityLevelIds": ["310"], "functionIds": ["15"], "maxItems": 10, "profileScraperMode": "Short" }
-```
+Slug = last URL segment (`linkedin.com/in/williamhgates` → `williamhgates`). Output is semi-structured text plus a clean `references` array of linked profile/company/post URLs.
+
+## MCP gotchas
+- **Company-by-name is ambiguous** — a plain slug can hit the wrong company (e.g. `anthropic` returned a VC fund, not the AI lab). Verify with `search_companies` or use the exact vanity slug.
+- **Search filters are fuzzy** — LinkedIn often ignores location; `current_company` needs the numeric URN (from `get_company_profile`), not a name.
+- **Browser-based and serialized** (one call at a time). Meter small batches — pace calls, modest counts, minimal sections — to avoid timeouts and 403s. Send large bulk to Apify.
 
 ---
 
-## D — Company-employee lookup ("CMO at Best Buy")
-### harvestapi/linkedin-company-employees
-Company-anchored; same filters as C. **Also needs one-time permission approval.** Pricing: $0.02 start + $0.003 short / $0.008 full / $0.012 full+email per profile.
-```json
-{ "companies": ["https://www.linkedin.com/company/best-buy"], "jobTitles": ["Chief Marketing Officer"], "seniorityLevelIds": ["310"], "profileScraperMode": "Short ($4 per 1k)", "maxItems": 5 }
-```
-Use D when company-anchored; C when criteria span companies.
+# Option B — Apify (large bulk, emails, shared, no account risk)
+
+Apify connector with your org's shared Apify token. **Setup:** open your org's Apify onboarding doc ({{APIFY_SETUP_DOC_URL}}) ({{APIFY_SETUP_DOC_PATH}}). Pattern: `call-actor` (`waitSecs: 45`) → `get-dataset-items` (always project `fields=`). Full recipes: `SKILL-apify-prior.md`.
+
+Pick the actor by need:
+- **Profile, no contact info:** `harvestapi/linkedin-profile-scraper` → `{"profileScraperMode":"Profile details no email ($4 per 1k)","publicIdentifiers":["<slug>"]}` (use `publicIdentifiers`, not `urls`).
+- **Email + phone:** `dev_fusion/Linkedin-Profile-Scraper` → `{"profileUrls":["https://www.linkedin.com/in/<slug>/"]}`.
+- **A person's posts:** `harvestapi/linkedin-profile-posts` → `{"targetUrls":["…/in/<slug>/"],"maxPosts":20,"scrapeReactions":false,"scrapeComments":false}` (reaction/comment scraping bills per record — leave OFF).
+- **People search:** `harvestapi/linkedin-profile-search` (one-time permission approval — surface the URL, retry). Filters incl. `seniorityLevelIds` (310 CXO, 220 Director…), `functionIds` (15 Marketing, 8 Engineering…).
+- **Company employees:** `harvestapi/linkedin-company-employees` (same filters; permission approval). Pass the full company URL.
+- **Department headcount:** `scrapemint/linkedin-company-employees-scraper` (free) → `{"companyUrls":["…/company/<slug>/"],"includeInsights":true}` returns `totalEmployees` + `insights.jobFunctions` distribution.
+
+## Apify gotchas
+- Exact `profileScraperMode` strings (incl. the price suffix) or validation fails.
+- People-search and company-employees need a one-time permission approval.
+- Always project `fields=`; profiles return 130–230 columns.
 
 ---
 
-## No single profile+posts actor
-None returns profile + posts together. Chain A + B (two runs).
-
-## Gotchas
-1. `publicIdentifiers` > `urls` for harvestapi profiles (`urls` returned empty). Slug = last URL segment.
-2. Exact `profileScraperMode` strings incl. price suffix, or validation fails.
-3. Permission gates (C, D): surface the approval URL and stop; retry after approval.
-4. Reaction/comment cost trap (B): billed per record. Default OFF; counts are free.
-5. Always project `fields=`.
-6. `get-dataset-items` may hit an approval gate; the run still succeeded, so approve or re-issue.
-
-## Defaults
-Profiles → harvestapi `publicIdentifiers` no-email; dev_fusion for email/phone. Posts → harvestapi, reactions/comments OFF. C/D only after permission approval.
+Tool-name prefix varies by client: `mcp__linkedin__*` / `mcp__apify__*` (Claude Code) vs `linkedin:*` / `Apify:*` (Claude Desktop).
