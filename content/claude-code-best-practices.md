@@ -229,44 +229,40 @@ These work across all Claude surfaces (web, mobile, Claude Code) and require no 
 
 ---
 
-## Adaptive MCP Profiles
+## Adaptive MCP Profiles (token economics)
 
-A SessionStart hook automatically detects the project type and adjusts behavior. This prevents irrelevant tools from cluttering the context.
+**The point of this system is to stop paying for tools you aren't using.** Every connected MCP server loads its tool definitions into the context window *every turn*, and every enabled plugin loads its skills/commands the same way. A full stack of 25+ MCP servers plus a dozen plugins is a large, permanent context tax, and most of it is irrelevant to whatever you're doing in a given directory. So instead of running everything everywhere, a SessionStart hook loads only the tools that directory's work actually needs and switches the rest off (they cost zero context that session).
 
-### How It Works
+### How it works
 
-1. On every session start, `~/.claude/scripts/mcp-profile.sh` runs
-2. Checks `mcp-profiles.conf` for explicit directory-to-profile mappings
-3. Falls back to auto-detection from file signatures (package.json, tsconfig.json, pyproject.toml, firebase.json, etc.)
-4. Toggles plugins (context7, playwright) based on profile
-5. Injects a system message so Claude immediately knows what profile is active
+A SessionStart hook (`~/.claude/scripts/mcp-profile.sh`) resolves a **profile** from the working directory, then toggles MCP servers (the `disabled` flag in `~/.claude.json`) and plugins (`enabledPlugins` in `settings.json`) to match.
+
+1. Resolve the profile:
+   - explicit directory→profile map in `~/.claude/scripts/mcp-profiles.conf` (prefix match), else
+   - auto-detect from file signatures (`package.json`+`tsconfig.json`, `pyproject.toml`, `next.config.*`, `Cargo.toml`, `go.mod` → coding; MARVIN/MAVEN layout → mma), else
+   - `CLAUDE_PROFILE=<name>` env override.
+2. Switch each MCP server and managed plugin on/off for that profile.
+3. Print a system message naming the active profile and what's on.
+4. Changes apply on the **next** session (MCPs and plugins load at startup).
 
 ### Profiles
 
-| Profile | Trigger | Behavior |
-|---------|---------|----------|
-| **mma** | MARVIN, MAVEN, MMA repos | Coding plugins off. claude.ai connectors prioritized for Slack, Asana, M365. |
-| **coding** | package.json+tsconfig, pyproject.toml, firebase.json, Cargo.toml, go.mod | context7 and playwright plugins ON. MMA MCPs deprioritized. |
-| **content** | Content pipeline directories | LinkedIn, Canva, Gemini image gen, Firecrawl, Perplexity prioritized. |
-| **default** | Everything else | All MCPs available. Coding plugins off. |
+| Profile | Used for | Loads | Off |
+|---|---|---|---|
+| **mma** | MARVIN, MMA repos | ms365, asana, fireflies, firecrawl, apify, gemini, google-workspace, parallel-search | coding/content/n8n tools |
+| **coding** | app repos (auto-detected) | firecrawl, taskmaster, gemini, google-workspace, todoist + TS/Py LSP, context7, playwright | MMA/comms/content |
+| **vercel** | Vercel apps | coding stack + Vercel plugin | n8n, content |
+| **content** | content pipeline | parallel-search, jina, firecrawl, exa, perplexity, n8n-mcp, linkedin, apify + n8n skills | MMA/coding |
+| **personal-website** | personal site | parallel, exa, firecrawl, jina, apify, ms365 + frontend plugins | n8n, comms |
+| **board-monitor** | LinkedIn drafter | linkedin, apify, firecrawl, gemini | most others |
+| **default** | unmatched dirs | parallel-search, gemini only | everything else |
+| **none** | scratch/personal dirs | nothing | all |
 
-### Configuration
+### Why it matters in practice
 
-Explicit overrides in `~/.claude/scripts/mcp-profiles.conf`:
+n8n's MCP plus its two skill plugins are only useful when building workflows, so they load **only** in the `content` profile, not in the dozen other directories where they'd be dead weight. The same logic retires anything redundant globally: drop a scraper that another tool already covers, and disable a claude.ai connector in Claude Code when a local MCP or plugin does the same job (the connector stays available on mobile). Net effect: a coding session isn't carrying Outlook, Asana, and LinkedIn tool definitions it will never call, and the context window is spent on work instead of unused tool schemas.
 
-```
-# MMA org work
-/Users/alec/marvin=mma
-/Users/alec/mma-plugin=mma
-/Users/alec/mma-maven-template=mma
-
-# Software development
-/Users/alec/arcpush=coding
-/Users/alec/mma-rag-prototype=coding
-/Users/alec/rep-radar=coding
-```
-
-New projects with standard file signatures are recognized automatically without configuration.
+Config: one `path=profile` line per directory in `~/.claude/scripts/mcp-profiles.conf`, plus the `case` block in `mcp-profile.sh`. New projects with standard file signatures are profiled automatically without any config.
 
 ---
 
