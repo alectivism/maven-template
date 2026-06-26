@@ -1,9 +1,9 @@
 # Claude Code: Setup, Architecture, and Best Practices
 
 **Author:** Alec Foster, MMA
-**Last updated:** 2026-04-15
+**Last updated:** 2026-06-25
 
-This document captures how I've configured Claude Code as a comprehensive AI operating system for both organizational and personal work. It covers architecture decisions, MCP integrations, multi-model orchestration, skill systems, automation patterns, and lessons learned over four months of intensive daily use.
+This document captures how I've configured Claude Code as a comprehensive AI operating system for both organizational and personal work. It covers architecture decisions, MCP integrations, multi-model orchestration, skill systems, the custom statusline, remote control, automation patterns, and lessons learned over six months of intensive daily use.
 
 ---
 
@@ -20,15 +20,17 @@ This document captures how I've configured Claude Code as a comprehensive AI ope
 9. [Subagents and Parallel Dispatch](#subagents-and-parallel-dispatch)
 10. [Plugins](#plugins)
 11. [Hooks and Automation](#hooks-and-automation)
-12. [Memory System](#memory-system)
-13. [Security and Permissions](#security-and-permissions)
-14. [Project-Specific Setups](#project-specific-setups)
-15. [Content Pipeline](#content-pipeline)
-16. [Scraping Techniques](#scraping-techniques)
-17. [Workflow Patterns](#workflow-patterns)
-18. [MARVIN: The AI Chief of Staff](#marvin-the-ai-chief-of-staff)
-19. [Deployment to Staff](#deployment-to-staff)
-20. [Key Lessons Learned](#key-lessons-learned)
+12. [Statusline and Tooltip](#statusline-and-tooltip)
+13. [Remote Control, Teammates, and Notifications](#remote-control-teammates-and-notifications)
+14. [Memory System](#memory-system)
+15. [Security and Permissions](#security-and-permissions)
+16. [Project-Specific Setups](#project-specific-setups)
+17. [Content Pipeline](#content-pipeline)
+18. [Scraping Techniques](#scraping-techniques)
+19. [Workflow Patterns](#workflow-patterns)
+20. [MARVIN: The AI Chief of Staff](#marvin-the-ai-chief-of-staff)
+21. [Deployment to Staff](#deployment-to-staff)
+22. [Key Lessons Learned](#key-lessons-learned)
 
 ---
 
@@ -60,7 +62,7 @@ MARVIN (Alec's personal instance)
 
 ### Layer 1: MARVIN
 
-My personal AI Chief of Staff. Full integration stack (30+ MCP servers), session management, persistent memory, goal tracking, content pipeline, multi-model CLI access, bypass-permissions mode. Lives at `~/marvin/`.
+My personal AI Chief of Staff. Full integration stack (30+ MCP servers), session management, persistent memory, goal tracking, content pipeline, multi-model CLI access, auto-mode permissions with a curated allow-list. Lives at `~/marvin/`.
 
 ### Layer 2: MAVEN
 
@@ -85,12 +87,17 @@ Claude Code configuration lives at two levels:
 ```
 ~/.claude/
   CLAUDE.md              # Communication style, safety rules, parallel dispatch prefs
-  settings.json          # Plugins, permissions, hooks, effort level, feature flags
+  settings.json          # Plugins, permissions, hooks, effort, statusline, feature flags
+  settings.local.json    # Machine-local permission allow-list (not synced)
+  remote-settings.json   # Remote-control channel + permission ask/deny for web/mobile
+  keybindings.json       # Custom key bindings (alt/shift+enter = newline)
   .claude.json           # MCP server definitions (auto-generated)
-  agents/                # 12 shared subagents (researcher, email-drafter, etc.)
+  agents/                # 12 shared subagents (haiku/sonnet tiered)
   scripts/
     mcp-profile.sh       # SessionStart hook: adaptive MCP profile detection
     mcp-profiles.conf    # Directory-to-profile mapping overrides
+    mcp-env.sh           # SessionStart hook: loads MCP secrets from ~/marvin/.env
+    statusline.sh        # Custom statusline (model, effort, context, usage pace)
   mcp-servers/           # Custom MCP server code
     dynalist/            # Dynalist API (Zod 3 pinned)
     openai/              # GPT-5.4 wrapper
@@ -119,17 +126,34 @@ Each project has its own CLAUDE.md and optional rules, skills, and commands:
 
 ```json
 {
-  "defaultMode": "bypassPermissions",
-  "effortLevel": "medium",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75"
+  },
+  "permissions": { "defaultMode": "auto", "allow": [ ... ], "ask": [ ... ], "deny": [ ... ] },
+  "effortLevel": "xhigh",
+  "tui": "fullscreen",
+  "theme": "light",
+  "teammateMode": "tmux",
+  "remoteControlAtStartup": true,
+  "agentPushNotifEnabled": true,
+  "awaySummaryEnabled": false,
   "autoDreamEnabled": true,
   "voiceEnabled": true,
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "statusLine": { "type": "command", "command": "~/.claude/scripts/statusline.sh" }
 }
 ```
 
-- **bypassPermissions**: Trusted workspace. All tool calls execute without prompts except explicitly denied patterns.
-- **effortLevel: medium**: Balanced token usage. Opus still runs, just more concise.
+- **permissions.defaultMode: auto**: Moved off blanket `bypassPermissions`. Auto mode runs the large curated `allow` list without prompts, still asks on the `ask` list (destructive git/rm), and blocks the `deny` list. More granular than bypass, same low-friction feel in practice. See [Security and Permissions](#security-and-permissions).
+- **effortLevel: xhigh**: Bumped from `medium`. Daily driver is Opus 4.8 (1M context) on a subscription, so reasoning depth costs nothing extra; xhigh buys better planning and fewer wrong turns.
+- **CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1**: Enables named, addressable teammate agents (see [Teammates](#remote-control-teammates-and-notifications)).
+- **CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=75**: Triggers auto-compaction at 75% of the context window instead of the default, keeping headroom before the summary kicks in.
+- **tui: fullscreen / theme: light**: Fullscreen TUI, light theme.
+- **teammateMode: tmux**: Teammate agents spawn in tmux panes for live side-by-side monitoring.
+- **remoteControlAtStartup / agentPushNotifEnabled**: Remote control armed on every session start; push notifications on. See [Remote Control](#remote-control-teammates-and-notifications).
 - **autoDreamEnabled**: Background memory consolidation between sessions.
+- **statusLine**: Custom statusline script. See [Statusline and Tooltip](#statusline-and-tooltip).
 
 ---
 
@@ -153,10 +177,11 @@ Each project has its own CLAUDE.md and optional rules, skills, and commands:
 
 | Tool | MCP Server | What It Does |
 |------|-----------|--------------|
-| Web Search | parallel-search (primary, free) | General web search and page content extraction |
+| Web Search | parallel-search (primary; cheap, effectively unlimited) | General web search and page content extraction |
 | Semantic Search | exa | AI-powered semantic web search |
 | AI Research | perplexity | Synthesized answers with citations, deep multi-source research |
-| Web Scraping | firecrawl | JS-rendered scraping, batch scrape, site crawl/map |
+| Web Scraping | firecrawl | JS-rendered scraping, batch scrape, site crawl/map (escalate to it) |
+| Fast Fetch | jina-reader | URL → clean markdown. Default fetch; escalate to Firecrawl for JS/anti-bot |
 | Platform Search | search1api | Reddit, X/Twitter, YouTube, news search (100 free credits) |
 | LinkedIn | linkedin + apify-linkedin | Profile/company lookup, post history with engagement stats |
 
@@ -182,8 +207,8 @@ Each project has its own CLAUDE.md and optional rules, skills, and commands:
 
 | Tool | MCP Server | What It Does |
 |------|-----------|--------------|
-| n8n (live) | n8n-cloud | Create, execute, and update workflows on live instance |
-| n8n (docs) | n8n-mcp | Node documentation, templates, workflow validation |
+| n8n (primary) | n8n-mcp (czlonkowski) | Build/validate/autofix workflows, 1,845-node offline docs (anti-hallucination), 2,300+ templates, version history + rollback, instance security audit. Local npx + API key. |
+| n8n (official) | n8n built-in MCP | First-party, instance-wide; builds/validates/tests workflows. Remote connector, so it also works from Claude mobile. Connect via claude.ai. Pairs with czlonkowski's, which carries the richer offline node knowledge. |
 | Salesforce | salesforce (disabled by default) | Query records, run reports. Enabled on demand. |
 | Task Master | taskmaster-ai | Break requirements into structured tasks with dependencies |
 | Sequential Thinking | sequential-thinking | Structured reasoning scratchpad for complex problems |
@@ -394,26 +419,27 @@ Handle directly when:
 
 The agent that gathers information must also produce the output. Splitting research and writing creates a "telephone game" that degrades information quality. A content-writer subagent researches AND drafts. A researcher subagent gathers AND synthesizes.
 
-### Model Routing: Sonnet vs Opus
+### Model Routing: Three Tiers (Haiku / Sonnet / Opus)
 
-**Default: sonnet for all subagents.** This is a deliberate token-saving strategy. Sonnet is fast, cheap, and good enough for the vast majority of delegated work. Every custom agent definition in `~/.claude/agents/` has `model: sonnet` in its frontmatter.
+The setup has moved from "sonnet for everything" to a **three-tier scheme** that matches model cost to task difficulty. The frontmatter `model:` field pins each agent's tier; opus is reserved for the orchestrator and per-task overrides.
 
-**Use opus only when the task requires:**
-- Deep reasoning or complex architectural judgment
-- High-quality long-form prose (thought leadership, detailed analysis)
-- Multi-step logic where intermediate reasoning quality matters
+**Tier 1 — haiku** (cheapest, mechanical retrieval and formatting):
+- `asana-manager`: creating/updating tasks from natural language. Structured API calls, no reasoning.
+- `dependency-auditor`: scanning manifests for outdated/vulnerable packages. Pattern matching.
+- `slack-drafter`: short, casual messages. Tone rules in the prompt do the work.
 
-**In practice, this means:**
-- Research agents: **sonnet**. They search, gather, and summarize. Speed matters more than prose quality.
-- Email drafters: **sonnet**. The voice rules in the agent prompt handle tone. Sonnet follows them fine.
-- Content reviewers: **sonnet**. Brand compliance is rule-following, not creative reasoning.
-- Bug investigators: **sonnet**. Tracing execution paths is systematic, not creative.
-- Meeting prep: **sonnet**. Gathering attendee info and past interactions is retrieval-heavy.
-- Deep research: **opus** (via the `model` parameter when dispatching). When synthesis quality matters more than speed.
-- Content writing: **opus** (when dispatching content-writer). Long-form prose benefits from stronger reasoning.
-- Architecture decisions: **opus**. Complex trade-off analysis.
+**Tier 2 — sonnet** (default; structured work that needs comprehension):
+- `researcher`, `meeting-prep`: search, gather, summarize. Retrieval-heavy.
+- `email-drafter`, `content-reviewer`: voice and brand rules live in the prompt; sonnet follows them reliably.
+- `bug-investigator`, `test-writer`, `doc-writer`, `pr-preparer`, `migration-planner`: systematic, not creative.
+- `content-writer`, `deep-research`, `ops-executor` (project-level): default sonnet.
 
-The savings are significant. A sonnet subagent that runs 5 searches and produces a 300-word summary costs a fraction of the same work on opus. Over dozens of subagent dispatches per day, this adds up.
+**Tier 3 — opus** (deep reasoning, dispatched via the `model` override, not pinned in frontmatter):
+- Long-form thought leadership where prose quality matters (dispatch `content-writer` with `model: opus`).
+- High-stakes synthesis (dispatch `deep-research` with `model: opus`).
+- Architecture and complex trade-off analysis.
+
+**Why three tiers:** haiku costs a fraction of sonnet for tasks that are pure retrieval or formatting (Asana CRUD, Slack one-liners, dependency scans). Sonnet handles the bulk. Opus is pulled in only when intermediate reasoning quality actually changes the output. Over dozens of dispatches a day the haiku tier is meaningful savings on top of the sonnet-vs-opus split.
 
 ### Agent Anatomy
 
@@ -449,56 +475,69 @@ Key design choices:
 
 ### Shared Subagents (`~/.claude/agents/`)
 
-12 reusable agents defined at user level:
+12 reusable agents defined at user level (Tier = pinned `model:`):
 
-| Agent | Purpose |
-|-------|---------|
-| researcher | Multi-source web research with structured findings |
-| deep-research | Extended research requiring 3+ sources and synthesis |
-| content-writer | Research + long-form content in one context |
-| email-drafter | Emails in my natural voice |
-| slack-drafter | Casual Slack messages |
-| meeting-prep | Attendee research, past interactions, talking points |
-| content-reviewer | Review against MMA brand guidelines |
-| test-writer | Follows existing test patterns in the project |
-| bug-investigator | Traces execution paths, reads logs, identifies root causes |
-| doc-writer | Generates/updates documentation from code |
-| pr-preparer | PR title, description, and test plan from branch diff |
-| migration-planner | Plans migrations with sequenced steps and rollback options |
+| Agent | Tier | Purpose |
+|-------|------|---------|
+| researcher | sonnet | Multi-source web research with structured findings |
+| email-drafter | sonnet | Emails in my natural voice |
+| meeting-prep | sonnet | Attendee research, past interactions, talking points |
+| content-reviewer | sonnet | Review against MMA brand guidelines |
+| test-writer | sonnet | Follows existing test patterns in the project |
+| bug-investigator | sonnet | Traces execution paths, reads logs, identifies root causes |
+| doc-writer | sonnet | Generates/updates documentation from code |
+| pr-preparer | sonnet | PR title, description, and test plan from branch diff |
+| migration-planner | sonnet | Plans migrations with sequenced steps and rollback options |
+| asana-manager | haiku | Creates/updates/organizes Asana tasks from natural language |
+| dependency-auditor | haiku | Outdated/vulnerable/license checks on dependencies |
+| slack-drafter | haiku | Casual, concise Slack messages |
+
+### Project-Level Subagents (`~/marvin/.claude/agents/`)
+
+3 agents scoped to MARVIN, plus a `_template.md` for new ones:
+
+| Agent | Tier | Purpose |
+|-------|------|---------|
+| content-writer | sonnet (opus override) | Research + long-form content in one context |
+| deep-research | sonnet (opus override) | Extended research requiring 3+ sources and synthesis |
+| ops-executor | sonnet | Bulk Asana/Slack/email/calendar ops (3+ integration calls) |
 
 ### Routing Rules
 
-- **sonnet** by default for subagents (fast, cheap, good enough for most tasks)
-- **opus** only when the task requires deep reasoning, complex architecture, or high-quality prose
+- **Tier the agent to the task:** haiku for mechanical retrieval/formatting, sonnet for the bulk, opus only via `model` override for deep reasoning or high-quality prose
 - All coordination stays with MARVIN (subagents never spawn their own subagents)
 - Launch multiple subagents simultaneously when tasks are independent
+- For named, persistent teammates (addressable mid-run), see [Teammates](#remote-control-teammates-and-notifications)
 
 ---
 
 ## Plugins
 
-17 plugins enabled, providing structured workflows on top of Claude Code's base capabilities.
+The roster gets pruned aggressively. Carrying a plugin you don't use costs context (its commands, agents, and skill descriptions load into every session), so the rule is: enable it only if it earns its place. ~11 enabled at any time, the rest installed-but-off and toggled on when a project needs them.
 
-### Active Plugins
+### Active Plugins (enabled by default)
 
-| Plugin | Purpose |
-|--------|---------|
-| superpowers | Brainstorming, planning, TDD, code review, debugging, verification workflows |
-| feature-dev (x2) | Guided feature development with codebase understanding |
-| code-review | PR and code review with confidence-based filtering |
-| code-simplifier | Code clarity and refactoring |
-| skill-creator | Create, evaluate, and optimize skills |
-| plugin-dev | Plugin structure, hooks, MCP integration, agent/skill/command development |
-| commit-commands | Git commit, push, PR workflows |
-| claude-md-management | Audit and improve CLAUDE.md files |
-| frontend-design | Production-grade UI/UX with high design quality |
-| n8n-mcp-skills | n8n node configuration, validation, workflow patterns |
-| ralph-loop | Recurring prompt loops |
-| SkillIssue | Search for skills and plugins across marketplaces |
-| security-guidance | Security best practices |
-| vercel-plugin | Vercel deployment, AI SDK, Next.js, storage, functions |
-| telegram | Telegram bot channel management |
-| sentry | Error monitoring, SDK setup, issue triage |
+| Plugin | Marketplace | Purpose |
+|--------|-------------|---------|
+| superpowers | claude-plugins-official | Brainstorming, planning, TDD, code review, debugging, verification workflows |
+| feature-dev | claude-code-plugins | Guided feature development with codebase understanding |
+| code-review | claude-code-plugins | PR and code review with confidence-based filtering |
+| code-simplifier | claude-plugins-official | Code clarity and refactoring |
+| commit-commands | claude-plugins-official | Git commit, push, PR workflows |
+| claude-md-management | claude-plugins-official | Audit and improve CLAUDE.md files |
+| n8n-mcp-skills | czlonkowski/n8n-skills | n8n node config, validation, agent design, workflow patterns (14 skills) |
+| ralph-loop | claude-plugins-official | Recurring prompt loops |
+| claude-code-setup | claude-plugins-official | Automation recommender (hooks, subagents, skills, MCP) |
+| warp | claude-code-warp (warpdotdev) | Warp terminal integration |
+| vercel | claude-plugins-official | Vercel deploy, AI SDK, Next.js, storage, functions |
+
+### Installed but Disabled (toggle on when needed)
+
+`skill-creator`, `frontend-design`, `plugin-dev`, `asana`, `SkillIssue`, `security-guidance`, `telegram`, `sentry`, and the directory-install `vercel-plugin` (superseded by the official `vercel`). Off because they're either situational or duplicate something already covered.
+
+### Keeping plugins current
+
+Official Anthropic marketplaces auto-update at startup. GitHub-sourced marketplaces (e.g. `czlonkowski/n8n-skills`, `n8n-io/skills`) do **not** by default — they freeze at the version cached when added, which is how a community plugin silently goes stale while the official ones stay current. Enable per-marketplace auto-update by setting `"autoUpdate": true` on its `extraKnownMarketplaces` entry in `settings.json`, or refresh manually with `/plugin marketplace update <name>`.
 
 ### Profile-Toggled Plugins
 
@@ -507,7 +546,7 @@ Key design choices:
 
 ### LSP Plugins
 
-TypeScript, Pyright, Kotlin, Java, and Swift language server plugins are enabled for code intelligence across projects.
+TypeScript, Pyright, Kotlin, Java (jdtls), and Swift language servers are installed but **off by default** now. They load real overhead per session, so they're toggled on only when actively working in that language's codebase (the `coding` profile is the natural trigger).
 
 ---
 
@@ -515,7 +554,7 @@ TypeScript, Pyright, Kotlin, Java, and Swift language server plugins are enabled
 
 ### SessionStart Hook
 
-The only hook currently configured. Runs `~/.claude/scripts/mcp-profile.sh` on every session start to detect the project type and toggle plugins. Timeout: 10 seconds.
+The only hook configured. It now runs **two** scripts in sequence on every session start: `mcp-env.sh` loads MCP secrets, then `mcp-profile.sh` detects the project type and toggles plugins. Timeout: 10 seconds.
 
 ```json
 {
@@ -523,7 +562,7 @@ The only hook currently configured. Runs `~/.claude/scripts/mcp-profile.sh` on e
     "SessionStart": [{
       "hooks": [{
         "type": "command",
-        "command": "~/.claude/scripts/mcp-profile.sh",
+        "command": "source ~/.claude/scripts/mcp-env.sh && ~/.claude/scripts/mcp-profile.sh",
         "timeout": 10,
         "statusMessage": "Detecting MCP profile..."
       }]
@@ -531,6 +570,8 @@ The only hook currently configured. Runs `~/.claude/scripts/mcp-profile.sh` on e
   }
 }
 ```
+
+**`mcp-env.sh`** reads `~/marvin/.env` and exports each `KEY=value` into the environment before MCP servers connect, so MCPs that need API keys get them without hardcoding. Critically, it **unsets `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN`** so a stray key in `.env` can't override Claude Code's own claude.ai subscription auth (a leftover key here silently bills the API instead of using the subscription). If `.env` is missing it exits cleanly.
 
 ### Behavioral Rules (Always-On via CLAUDE.md and Rules Files)
 
@@ -544,6 +585,71 @@ These aren't hooks in the technical sense, but they're behavioral automation enc
 
 ---
 
+## Statusline and Tooltip
+
+The default statusline is replaced with a custom script (`~/.claude/scripts/statusline.sh`, wired via `settings.json` → `statusLine`). It's the single most-glanced-at piece of the setup: it answers "what model am I on, how much context is left, and how close am I to a rate limit" without leaving the terminal.
+
+### What It Shows
+
+```
+Opus 4.8 | xhigh | 🧠 142k 14% | Session 🟢 23% · 3h12m | Week 🟡 61% · 4d6h
+```
+
+| Segment | Meaning |
+|---------|---------|
+| `Opus 4.8` | Active model display name |
+| `xhigh` | Current effort level (read live from `settings.json`) |
+| `🧠 142k 14%` | Context tokens in use and % of the window (1M for Opus/200k-class, auto-detected from model id) |
+| `Session 🟢 23% · 3h12m` | Projected spend for the rolling 5-hour block vs cap, and time until reset |
+| `Week 🟡 61% · 4d6h` | Projected weekly spend vs cap (anchored to Wed 9 AM reset), and time until reset |
+
+### How the Usage Math Works
+
+There's no public Anthropic rate-limit API, so the percentages are a **cost-based proxy** computed from `ccusage`:
+
+- Session and weekly **cost in USD** (not raw tokens) is divided by a calibrated cap. Cost is used deliberately: cache-read tokens are billed at ~10% of fresh tokens, so token-based divisors drift heavily as a conversation grows, while cost stays stable.
+- The **pace emoji** projects the current burn rate to the end of the window: 🟢 on track (≤80%), 🟡 80–100%, 🔴 on pace to exceed.
+- Caps are calibrated by snapshotting `ccusage` cost and Anthropic's reported % at the **same moment** (current: ~$160 session / ~$1,560 weekly on the Team plan). Anthropic adjusts caps periodically, so the divisors need re-calibrating every few weeks — the script header documents the procedure and the last calibration date.
+
+### Why It Matters
+
+On a subscription with weekly caps, the failure mode is burning the weekly budget by Thursday. The statusline turns that invisible risk into a glanceable gauge: when Week goes 🟡 mid-week, ease off the xhigh/parallel-agent throttle; when it's 🟢, run freely.
+
+---
+
+## Remote Control, Teammates, and Notifications
+
+Three related capabilities that make Claude Code reachable beyond the local terminal.
+
+### Remote Control (`remoteControlAtStartup: true`)
+
+Remote control lets a local Claude Code session be driven and monitored from claude.ai web and the mobile app. Setting `remoteControlAtStartup: true` **arms it automatically on every session start** so any session is immediately controllable remotely without a manual toggle. This is the "activate remote control by default with each opening prompt" behavior: start MARVIN at the desk, keep steering it from a phone later.
+
+`~/.claude/remote-settings.json` governs the remote channel:
+
+```json
+{
+  "channelsEnabled": true,
+  "permissions": {
+    "ask": ["Bash(rm -rf *)", "Bash(git push --force*)", "Bash(git reset --hard*)", "..."],
+    "deny": ["Bash(chmod -R 777*)"]
+  }
+}
+```
+
+- **channelsEnabled**: turns on the remote channel that web/mobile connect through.
+- **permissions**: a remote-specific `ask`/`deny` layer. Remote-initiated runs still prompt on destructive git/rm operations and hard-block `chmod -R 777`, so driving from a phone is no more dangerous than the desk.
+
+### Teammates (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, `teammateMode: tmux`)
+
+Agent teams add **named, persistent subagents** on top of the fire-and-forget Agent dispatch. A teammate has an addressable name, keeps its context across turns, and can be messaged mid-run (continue/redirect it) rather than only consuming a final summary. With `teammateMode: tmux`, teammates spawn in tmux panes for live side-by-side monitoring instead of running fully hidden. This is experimental and complements (doesn't replace) the standard subagent dispatch in the [Subagents](#subagents-and-parallel-dispatch) section.
+
+### Push Notifications (`agentPushNotifEnabled: true`)
+
+Pushes a notification when a long-running or backgrounded agent finishes or needs input. Paired with remote control, this closes the loop: kick off a long task, walk away, get pinged when it's done or blocked, and resolve it from the phone. `awaySummaryEnabled: false` keeps the separate away-summary digest off (the push + statusline already cover it).
+
+---
+
 ## Memory System
 
 Claude Code's auto-memory system persists facts, preferences, and project context across sessions. Memory files live at `~/.claude/projects/-Users-alec-marvin/memory/`.
@@ -552,7 +658,7 @@ Claude Code's auto-memory system persists facts, preferences, and project contex
 
 | Type | Purpose | Example |
 |------|---------|---------|
-| **user** | Role, preferences, communication style | "Chief AI Architect, prefers dense analytical style" |
+| **user** | Role, preferences, communication style | "Chief Agent Officer, prefers dense analytical style" |
 | **feedback** | Corrections and confirmed approaches | "No em dashes in drafted text, use commas/colons instead" |
 | **project** | Ongoing work, decisions, context | "AI-AF training pivot: Claude first, Zapier second, Yellow Belt postponed" |
 | **reference** | Pointers to external resources | "Pipeline bugs tracked in n8n Cloud, MCP registry in memory file" |
@@ -578,15 +684,19 @@ Claude Code's auto-memory system persists facts, preferences, and project contex
 
 ### Permission Model
 
+The posture moved off blanket `bypassPermissions` to **`auto` mode backed by a large curated allow-list**. Auto mode runs anything matching `allow` without a prompt, still prompts on `ask`, and hard-blocks `deny`:
+
 ```json
 {
-  "defaultMode": "bypassPermissions",
   "permissions": {
-    "allow": ["(long list of pre-approved tool patterns)"],
+    "defaultMode": "auto",
+    "allow": ["(150+ pre-approved tool patterns: git, gh, npm, ms365, slack, notion, ...)"],
     "deny": ["Bash(chmod -R 777*)"],
     "ask": [
       "Bash(rm -rf *)",
+      "Bash(rm -r *)",
       "Bash(git push --force*)",
+      "Bash(git push -f*)",
       "Bash(git reset --hard*)",
       "Bash(git clean -f*)"
     ]
@@ -594,9 +704,11 @@ Claude Code's auto-memory system persists facts, preferences, and project contex
 }
 ```
 
-- **bypassPermissions** is used because MARVIN is a trusted personal workspace. This is NOT recommended for untrusted repos.
-- Destructive commands (rm -rf, force push, hard reset) still require confirmation via the `ask` list.
+- **Why the change:** `auto` + an explicit allow-list is more granular than bypass. The day-to-day friction is the same (the common tool patterns are all pre-approved), but anything genuinely novel still surfaces a prompt instead of running silently. The allow-list grew organically — each prompt answered "always allow" appends a pattern.
+- Destructive commands (`rm -rf`, force push, hard reset, `git clean -f`) require confirmation via the `ask` list, and this `ask`/`deny` layer is mirrored in `remote-settings.json` so remote-driven sessions get the same guardrails.
 - `chmod -R 777` is explicitly denied.
+- `skipDangerousModePermissionPrompt: true` suppresses the repeated "you're in a dangerous mode" banner; the allow/ask/deny lists are doing the real gating.
+- `settings.local.json` holds a smaller, machine-local allow-list that isn't synced to other devices.
 
 ### Safety Rules (Encoded in CLAUDE.md)
 
@@ -1032,7 +1144,7 @@ Philosophy: habits over features, doing over lectures, meet people where they ar
 
 ### MCP and Integration
 
-11. **parallel-search first, paid services second.** parallel-search is free and handles most web search needs. Firecrawl, Search1API, and Perplexity consume credits; use them only when their specific capabilities (JS rendering, Reddit search, AI synthesis) are needed.
+11. **parallel-search first, specialized tools second.** parallel-search is cheap (effectively unlimited) and handles ~90% of web search. Reach past it deliberately: **Exa** for semantic "find pages like this" / discovery by meaning, **Perplexity** for a synthesized cited answer (`perplexity_ask`) or deep multi-source research (`perplexity_research`). For fetching one page: **Jina Reader** by default (fast, free markdown), **Firecrawl** only for JS-heavy/anti-bot/structured-extract/crawl. A `search-and-scrape` skill encodes this routing so the right tool gets picked automatically instead of defaulting to one.
 
 12. **Firecrawl blocks Reddit and LinkedIn.** Use Search1API or Gemini for Reddit. Use linkedin/apify-linkedin MCPs for LinkedIn. Claude's built-in WebSearch is also blocked from reddit.com (Anthropic lawsuit).
 
@@ -1056,6 +1168,14 @@ Philosophy: habits over features, doing over lectures, meet people where they ar
 
 ### Security
 
-20. **bypassPermissions is for trusted workspaces only.** MARVIN is personal. For org deployment (MAVEN, MMA Plugin), use standard permission modes. The `.claude/` directory in an untrusted repo could exploit tool permissions.
+20. **Auto mode + a curated allow-list beats blanket bypass.** MARVIN moved off `bypassPermissions` to `auto` with an explicit allow-list. Same low friction (common patterns pre-approved), but novel commands still surface a prompt instead of running silently. For org deployment (MAVEN, MMA Plugin), use standard permission modes regardless. A `.claude/` directory in an untrusted repo could exploit tool permissions.
 
-21. **Confirm-before-send is non-negotiable.** Even in bypassPermissions mode, the CLAUDE.md rules enforce confirmation before sending emails, posting Slack messages, modifying Asana tasks, or publishing content. The cost of an errant message is high.
+21. **Confirm-before-send is non-negotiable.** Even in auto mode, the CLAUDE.md rules enforce confirmation before sending emails, posting Slack messages, modifying Asana tasks, or publishing content. The cost of an errant message is high. The `ask`/`deny` lists are mirrored into `remote-settings.json` so phone-driven sessions inherit the same guardrails.
+
+### Operations and Visibility
+
+22. **A cost-based usage statusline prevents budget surprises.** On a subscription with weekly caps, the real risk is burning the week's budget by Thursday. A custom statusline that projects spend (in USD, not raw tokens — cache reads distort token counts) turns an invisible limit into a glanceable 🟢/🟡/🔴 gauge. Recalibrate the divisors every few weeks; Anthropic adjusts caps without notice.
+
+23. **A haiku tier is worth adding below sonnet.** "Sonnet for everything" left money on the table. Pure-mechanical agents (Asana CRUD, Slack one-liners, dependency scans) run fine on haiku at a fraction of the cost. Three tiers — haiku/sonnet/opus — match model price to task difficulty better than two.
+
+24. **Remote control + push notifications closes the loop away from the desk.** With `remoteControlAtStartup: true`, every session is steerable from claude.ai web/mobile the moment it starts. Kick off a long task, walk away, get pushed when it finishes or blocks, and resolve it from a phone. The mobile leash is only useful if it's armed automatically — a manual toggle never gets flipped.
