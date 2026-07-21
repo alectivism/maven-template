@@ -312,7 +312,7 @@ Run the same prompt through all three models, synthesize the best ideas. Particu
 
 Skills are on-demand knowledge modules that load into context only when needed. This keeps the base context lean while making deep domain knowledge available.
 
-### MMA Skills (22 skills in `~/marvin/.claude/skills/`)
+### MMA Skills (21 skills in `~/marvin/.claude/skills/`)
 
 | Skill | Purpose |
 |-------|---------|
@@ -321,7 +321,6 @@ Skills are on-demand knowledge modules that load into context only when needed. 
 | mma-writing-style | Tone, voice, naming conventions, formatting standards |
 | mma-pptx-builder | PowerPoint deck construction with official template |
 | email-draft | Professional emails in MMA's brand voice |
-| social-post | LinkedIn posts for MMA channels |
 | press-release | Wire-ready press releases |
 | content-draft | Blog posts, articles, one-pagers, marketing collateral |
 | case-study | Case studies from lab results and member experiences |

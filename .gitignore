@@ -21,6 +21,7 @@ node_modules/
 
 # OS files
 .DS_Store
+/archive/
 Thumbs.db
 
 # Editor files

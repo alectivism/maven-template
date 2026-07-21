@@ -74,7 +74,7 @@ Reusable skills under `skills/`:
 - `skill-creator/` — Create new skills via prompt
 - `update/` — How `/update` does mid-day saves
 
-Plus generic skills like `research`, `social-post`, `zapier-workflow-builder` under `.claude/skills/`.
+Plus generic skills like `research` and `zapier-workflow-builder` under `.claude/skills/`.
 
 ### Integrations
 
@@ -153,7 +153,7 @@ Run `/sync` to pull new features from the template into your workspace without l
 | Multi-agent docs | Not included | 5 patterns documented |
 | MCP recommendations | Not opinionated | Curated list with rationale |
 | Settings | Defaults | Multi-agent teams enabled, higher autocompact threshold |
-| Default skills | Generic chief-of-staff | + research, social-post, content-shipped, zapier-builder |
+| Default skills | Generic chief-of-staff | + research, content-shipped, zapier-builder |
 
 Both are MIT-licensed. Use either, fork either, mix them.
 
