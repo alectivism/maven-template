@@ -72,6 +72,26 @@ For tasks that should run at a specific time (or repeatedly), use `/schedule` to
 
 ---
 
+## 6. Adversarial review (a second agent checks the first)
+
+An agent reviewing its own work grades itself generously, because it's defending its own choices. For anything that matters, spin up a **separate** agent that didn't produce the thing and give it a skeptical framing.
+
+Two rules make this actually useful rather than an endless loop:
+
+**Attack the plan, not the diff.** Review the approach before the work happens. Architectural mistakes are cheap to fix before anything is built and expensive after.
+
+**Frame it as a condition test, not a flaw hunt.** Don't say "find the problems." Say:
+
+> State what must be true for this to be correct, then check each of those things.
+
+Have it list the conditions it rests on (facts that must hold, people who must act, numbers that must land in a range) and mark each one supported, unsupported, or unknown.
+
+The difference matters. An agent told to find flaws will always find flaws, including invented ones, and will never signal that it's done. An agent testing named conditions returns a bounded list and stops. If every condition holds, that's the answer: report it and move on rather than reconvening until somebody objects.
+
+If you have access to more than one model family, run the reviewer on a different one than the author. Models catch each other's blind spots better than they catch their own.
+
+---
+
 ## Picking the right pattern
 
 | Need | Pattern |
@@ -81,6 +101,7 @@ For tasks that should run at a specific time (or repeatedly), use `/schedule` to
 | Persistent specialists with handoffs | Teams |
 | Wait for a long build | Background command |
 | Run something daily/weekly | Cron |
+| Check work before it ships | Adversarial review |
 
 Most days you'll only use subagents and worktrees. Teams are for big projects. Cron is for habits.
 
@@ -90,4 +111,5 @@ Most days you'll only use subagents and worktrees. Teams are for big projects. C
 
 - **Don't overuse subagents.** Each one spends tokens. If a task is short and synchronous, just do it in the main thread.
 - **Don't run more than 3 worktrees against one repo simultaneously.** You'll lose track.
+- **Re-run what a subagent says it ran.** "Tests pass" from a subagent is a claim. Verify before acting on it, and say whether you observed the result or were told it.
 - **Read [Claude Code docs on agents](https://docs.claude.com/claude-code/agents)** for the current syntax — the API evolves.

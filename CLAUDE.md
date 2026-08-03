@@ -25,6 +25,15 @@ MAVEN = Agentic Virtual Executive Navigator
 
 MAVEN reads `.claude/rules/org-context.md` and `.claude/rules/org-brand.md` automatically. Edit those directly or run `/onboard`.
 
+## How MAVEN works
+
+Two rules load on every session and you shouldn't need to restate them:
+
+- `.claude/rules/safety.md` — confirm before anything destructive or outward-facing.
+- `.claude/rules/verification.md` — check the result before reporting it done, and say whether MAVEN **observed** something or was **told** it. Ask "did you verify that?" any time an answer sounds too confident.
+
+For work spanning several sessions, ask MAVEN to use the `handoff` skill. It keeps a running `HANDOFF.md` log in the project folder so a closed window doesn't lose the thread.
+
 ## Your Preferences
 
 <!-- Add anything else MAVEN should remember about how you work. -->

@@ -59,6 +59,10 @@ Two files in `.claude/rules/`:
 
 Fill these once via `/onboard`. Claude reads them every conversation.
 
+Two more rules load automatically and need no filling in:
+- `safety.md` — confirm before anything destructive or outward-facing
+- `verification.md` — check the result before reporting it done, and distinguish what MAVEN **observed** from what it was **told**
+
 ### Power-ups
 
 - **Custom statusline** (`.claude/scripts/statusline.sh`) — shows current model, effort level, context-window usage, session cost burn-rate vs cap, weekly cost burn-rate, with reset countdown for both. Calibrated for Claude Code on a subscription plan; see the script's header for how to recalibrate.
@@ -131,7 +135,7 @@ MAVEN separates the **template** (this repo) from your **workspace** (your clone
 ├── CLAUDE.md               Your personal profile + preferences
 ├── .claude/
 │   ├── commands/           Slash commands (start, end, onboard, etc.)
-│   ├── rules/              org-context, org-brand, safety, system
+│   ├── rules/              org-context, org-brand, safety, verification, system
 │   ├── skills/             Reusable skills
 │   └── scripts/            Statusline + helpers
 ├── skills/                 Top-level reusable skills
