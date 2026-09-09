@@ -10,7 +10,7 @@ An opinionated Claude Code template that gives you an AI chief of staff with:
 
 Inspired by Sterling Chin's [MARVIN template](https://github.com/SterlingChin/marvin-template). This goes further: org-aware out of the box, more power-ups for serious Claude Code users, and built around real production use at a 90-person global organization.
 
-**Pairs with [organization-ai-skills](https://github.com/alectivism/organization-ai-skills):** MAVEN is the chief-of-staff layer that runs in your terminal. That repo is the skill pack, 19 generic Agent Skills grouped into installable plugins for Claude and ChatGPT, which is what you deploy to everyone else in the organization. Use MAVEN for yourself, ship the skill pack to the team.
+**Pairs with [organization-ai-skills](https://github.com/alectivism/organization-ai-skills):** MAVEN is the chief-of-staff layer that runs in your terminal. That repo is the skill pack, 30 generic Agent Skills grouped into six installable plugins for Claude and ChatGPT, which is what you deploy to everyone else in the organization. Use MAVEN for yourself, ship the skill pack to the team.
 
 ---
 
