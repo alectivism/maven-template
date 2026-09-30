@@ -12,6 +12,8 @@ Inspired by Sterling Chin's [MARVIN template](https://github.com/SterlingChin/ma
 
 **Pairs with [organization-ai-skills](https://github.com/alectivism/organization-ai-skills):** MAVEN is the chief-of-staff layer that runs in your terminal. That repo is the skill pack, 30 generic Agent Skills grouped into six installable plugins for Claude and ChatGPT, which is what you deploy to everyone else in the organization. Use MAVEN for yourself, ship the skill pack to the team.
 
+**The reasoning behind the setup:** the [Claude Code Playbook](https://www.alecfoster.com/tools/claude-code-playbook) ([repo](https://github.com/alectivism/claude-code-playbook)) covers the architecture, settings, MCP strategy, subagent routing, and 34 lessons behind this template.
+
 ---
 
 ## Quick start
