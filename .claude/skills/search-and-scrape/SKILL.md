@@ -11,7 +11,7 @@ Pick the tool that fits the job. Do not reflexively use one tool for everything.
 
 | Situation | Tool | Why |
 |---|---|---|
-| **Default** — facts, news, "what is X", finding a URL, most lookups | **parallel-search** (`web_search`/`web_fetch`) | Cheap (effectively unlimited here), fast, LLM-optimized excerpts. Handles ~90% of searches. |
+| **Default** — facts, news, "what is X", finding a URL, most lookups | **parallel-search** (`web_search`/`web_fetch`) | Free anonymous search powered by Fast mode, with usage limits and LLM-optimized excerpts. |
 | "Find pages **like** this", discovery by **meaning** not keywords, niche/technical sources, specific entity pages (papers, company/people pages), "find similar / find more like" | **Exa** (`web_search_exa`) | Neural/semantic search. Wins when keyword search returns junk or you want conceptual matches. Free tier is generous; content bundled with results. |
 | Need a **synthesized, cited answer** (not a list of links), multi-hop factual question | **Perplexity** `perplexity_ask` | Returns an answer with citations in one shot. |
 | **Deep research report** — multi-source, comprehensive, time OK to spend 30s+ | **Perplexity** `perplexity_research` | Heaviest/most expensive; reserve for genuine deep dives. |

@@ -20,8 +20,8 @@ For OAuth-based MCPs (Notion, Slack, etc.), use `claude mcp auth <name>` to walk
 
 ### Research & search
 
-**Parallel Search** — Multi-source web search optimized for AI. Fast, citations included, free tier.
-- `claude mcp add --scope user parallel-search -- npx -y @parallel-web/parallel-mcp`
+**Parallel Search** — Web search powered by Fast mode and page fetching, with no account or API key. Free usage has limits.
+- Run `./.marvin/integrations/parallel-search/setup.sh` for scope selection and safe reconfiguration.
 
 **Perplexity** — Web-grounded answers with citations. Great for current-events questions.
 - Three modes: `perplexity_ask` (quick), `perplexity_search` (URLs), `perplexity_research` (deep, 30s+).

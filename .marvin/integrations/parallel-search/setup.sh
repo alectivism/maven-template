@@ -30,26 +30,40 @@ fi
 echo ""
 echo "Where should this integration be available?"
 echo "  1) All projects (user-scoped)"
-echo "  2) This project only (project-scoped)"
+echo "  2) This project only (local-scoped)"
 echo ""
 echo -e "${YELLOW}Choice [1]:${NC}"
-read -r SCOPE_CHOICE
+read -r SCOPE_CHOICE || exit 1
 SCOPE_CHOICE=${SCOPE_CHOICE:-1}
 
-if [[ "$SCOPE_CHOICE" == "1" ]]; then
-    SCOPE_FLAG="-s user"
-else
-    SCOPE_FLAG=""
+case "$SCOPE_CHOICE" in
+    1) SCOPE="user" ;;
+    2) SCOPE="local" ;;
+    *) echo "Choose 1 or 2. No configuration changed."; exit 1 ;;
+esac
+
+# Keep saved endpoints, credentials and overrides unless the user opts in.
+if claude mcp get parallel-search > /dev/null 2>&1; then
+    echo ""
+    echo "Parallel Search is already configured."
+    echo "Replace its configuration in $SCOPE scope? (y/N)"
+    read -r REPLACE || REPLACE=""
+    if [[ "$REPLACE" != "y" && "$REPLACE" != "Y" ]]; then
+        echo "Keeping the existing configuration."
+        exit 0
+    fi
 fi
 
 echo ""
 echo -e "${BLUE}Adding Parallel Search MCP to Claude Code...${NC}"
 
 # Remove existing if present
-claude mcp remove parallel-search 2>/dev/null || true
+claude mcp remove parallel-search --scope "$SCOPE" 2>/dev/null || true
 
 # Add Parallel Search remote MCP server
-claude mcp add parallel-search $SCOPE_FLAG --transport http https://search-mcp.parallel.ai/mcp
+claude mcp add parallel-search --scope "$SCOPE" --transport http \
+    https://search.parallel.ai/mcp \
+    --header "User-Agent: maven-template/parallel-search"
 
 echo ""
 echo -e "${GREEN}Parallel Search MCP added!${NC}"
